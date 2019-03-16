@@ -1,0 +1,3 @@
+python-telegram-bot
+beautifulsoup4
+git+https://github.com/galeone/bitly-api-python
