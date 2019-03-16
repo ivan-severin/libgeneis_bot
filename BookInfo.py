@@ -1,9 +1,16 @@
+# -*- coding: utf-8 -*-
+
 import re
+import urllib.parse
 import urllib.request
+import urllib.error
+import bitly_api
+from common import BITLY_USER, BITLY_API_KEY
 from bs4 import BeautifulSoup
 
 
 class BookInfo:
+    """Class for storing book information"""
     def __init__(self, book):
         self.title = book.get('title', None)
         self.authors = book.get('authors', None)
@@ -23,13 +30,14 @@ class BookInfo:
 
     def __str__(self):
         text_str = '''\
-Book: 
+Book:
     author: {author},
-    publisher: {publisher},
     title: {title},
+    publisher: {publisher},
     pages: {pages},
     format: {format},
     year: {year},
+    size: {size},
     links: {links}\
     '''.format(author=self.authors,
                publisher=self.publisher,
@@ -37,34 +45,39 @@ Book:
                pages=self.pages,
                format=self.format,
                year=self.year,
-               links= self.download_links)
+               size=self.size,
+               links=self.download_links)
 
         return text_str
 
 
 class BookInfoProvider:
+    """Class which loads book information"""
     DOMAIN = 'http://libgen.io'
     URL = DOMAIN + '/search.php?req={}&open=0&view=simple&phrase=1&column={}'
 
-    def __init__(self, search_query, search_type):
-        self.query = search_query.strip().replace(" ", "+")
-        self.type = search_type
+    def __init__(self):
+        self.bitly = bitly_api.Connection(BITLY_USER, BITLY_API_KEY)
 
-    def load_book_list(self):
-        request = urllib.request.Request(BookInfoProvider.URL.format(self.query, self.type))
-        print(BookInfoProvider.URL.format(self.query, self.type))
+    def load_book_list(self, search_query, search_type):
+        """Loads books with search_query and search_type. Returns list()"""
+        search_query = search_query.strip().replace(" ", "+")
+        search_query = urllib.parse.quote(search_query)
+
+        request = urllib.request.Request(self.URL.format(search_query, search_type))
         response = urllib.request.urlopen(request)
 
         soup = BeautifulSoup(response, 'html.parser')
         table = soup.find('table', attrs={'class': 'c'})
         table_rows = table.findAll('tr', recursive=False)[1:]
         book_list = list()
-        for row in table_rows:
-            book_list.append(BookInfo(self.extract_book(row)))
+        for row in table_rows[:5]:
+            book_list.append(BookInfo(self.__extract_book(row)))
 
         return book_list
 
-    def extract_book(self, table_row):
+    def __extract_book(self, table_row):
+        """Extract book information from piece of html page. Returns dictionary"""
         book = dict()
 
         domains = table_row.find_all('td')
@@ -91,10 +104,38 @@ class BookInfoProvider:
             # Get download links
             links = list()
             for link in next(it).find_all('a'):
-                links.append(link['href'])
+                download_link = self.__get_download_link(link['href'])
+                if download_link is not None:
+                    links.append(download_link)
 
             book['links'] = links
         except Exception as e:
-            print('Got error:', e)
-
+            print('Got gggg error:', e)
+            raise(e)
         return book
+
+    def __get_download_link(self, book_link):
+        download_link = None
+        request = urllib.request.Request(book_link)
+        try:
+            response = urllib.request.urlopen(request)
+            soup = BeautifulSoup(response, 'html.parser')
+
+            long_link = soup.find_all('a', href=True, text='GET')[0]['href']
+            download_link = self.bitly.shorten(long_link)['url']
+
+        except urllib.error.HTTPError as e:
+            # Return code error (e.g. 404, 501, ...)
+            # ...
+            print('HTTPError: ', e.code)
+        except urllib.error.URLError as e:
+            # Not an HTTP-specific error (e.g. connection refused)
+            # ...
+            print('URLError: ', e.reason)
+        except bitly_api.BitlyError as e:
+            # this fucking bit.ly
+            print('BitlyError: ', e)
+        except  Exception as e:
+            # this another shit
+            print('Some Another error:', e)
+        return download_link
