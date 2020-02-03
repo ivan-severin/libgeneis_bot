@@ -1,16 +1,19 @@
 # -*- coding: utf-8 -*-
 
 import re
+import urllib.error
 import urllib.parse
 import urllib.request
-import urllib.error
+
 import bitly_api
-from common import BITLY_USER, BITLY_API_KEY
 from bs4 import BeautifulSoup
+
+from common import BITLY_USER, BITLY_API_KEY, LIBGEN_DOMAIN
 
 
 class BookInfo:
     """Class for storing book information"""
+
     def __init__(self, book):
         self.title = book.get('title', None)
         self.authors = book.get('authors', None)
@@ -53,8 +56,7 @@ Book:
 
 class BookInfoProvider:
     """Class which loads book information"""
-    DOMAIN = 'http://libgen.io'
-    URL = DOMAIN + '/search.php?req={}&open=0&view=simple&phrase=1&column={}'
+    URL = LIBGEN_DOMAIN + 'search.php?req={}&open=0&view=simple&phrase=1&column={}'
 
     def __init__(self):
         self.bitly = bitly_api.Connection(BITLY_USER, BITLY_API_KEY)
@@ -110,8 +112,8 @@ class BookInfoProvider:
 
             book['links'] = links
         except Exception as e:
-            print('Got gggg error:', e)
-            raise(e)
+            print('Got error:', e)
+            raise (e)
         return book
 
     def __get_download_link(self, book_link):
@@ -135,7 +137,8 @@ class BookInfoProvider:
         except bitly_api.BitlyError as e:
             # this fucking bit.ly
             print('BitlyError: ', e)
-        except  Exception as e:
+            download_link = long_link
+        except Exception as e:
             # this another shit
             print('Some Another error:', e)
         return download_link
